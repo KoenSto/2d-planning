@@ -1,10 +1,16 @@
-# Wijzigingen
-
-## 1.0.0 - 2026-07-14
-
-- Eerste openbare MVP.
-- PDOK BRT-achtergrondkaart, Location API en BRK-perceelbevraging.
-- Teken- en bewerkfuncties voor vier ruimtelijke categorieën.
-- Scenario-opslag, vergelijking, import en export.
-- Live ruimtelijke kengetallen en demonstratiescenario.
-- GitHub Pages-workflow en automatische tests.
+{
+  "name": "RuimteScenario PDOK",
+  "short_name": "RuimteScenario",
+  "description": "2D-tool voor ruimtelijke scenario's met Nederlandse PDOK-data.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f2",
+  "theme_color": "#0f3d3e",
+  "icons": [
+    {
+      "src": "./assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
