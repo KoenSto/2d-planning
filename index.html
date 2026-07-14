@@ -1,6 +1,382 @@
-.DS_Store
-Thumbs.db
-.vscode/
-.idea/
-node_modules/
-*.log
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Maak en vergelijk 2D-ruimtelijke scenario's op Nederlandse PDOK-kaarten.">
+<meta name="theme-color" content="#0f3d3e">
+<title>RuimteScenario PDOK</title>
+<link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="./manifest.webmanifest">
+<link
+rel="stylesheet"
+href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+crossorigin=""
+>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.20.0/dist/leaflet-geoman.css">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<noscript>
+<div class="fatal-message">Deze toepassing heeft JavaScript nodig.</div>
+</noscript>
+
+<div id="dependency-error" class="fatal-message hidden" role="alert">
+De kaartbibliotheken konden niet worden geladen. Controleer de internetverbinding en vernieuw de pagina.
+</div>
+
+<div class="app-shell">
+<header class="topbar">
+<div class="brand" aria-label="RuimteScenario PDOK">
+<img src="./assets/logo.svg" width="36" height="36" alt="">
+<div>
+<strong>RuimteScenario</strong>
+<span>2D-planner met PDOK-data</span>
+</div>
+</div>
+
+<div class="topbar-actions">
+<span id="save-status" class="save-status" aria-live="polite">Lokaal opgeslagen</span>
+<button id="compare-button" class="button button-secondary" type="button">Vergelijk</button>
+<button id="export-json-button" class="button button-secondary" type="button">JSON</button>
+<button id="export-geojson-button" class="button button-secondary" type="button">GeoJSON</button>
+<button id="import-button" class="button button-secondary" type="button">Importeer</button>
+<button id="help-button" class="button button-primary" type="button">Uitleg</button>
+<input id="import-input" type="file" accept=".json,.geojson,application/json,application/geo+json" hidden>
+</div>
+</header>
+
+<main class="workspace">
+<aside class="panel panel-left" aria-label="Scenario en tekengereedschap">
+<section class="panel-section">
+<div class="section-heading">
+<div>
+<p class="eyebrow">Projectvariant</p>
+<h2>Scenario</h2>
+</div>
+<span id="scenario-count" class="badge">1</span>
+</div>
+
+<label class="field-label" for="scenario-select">Actief scenario</label>
+<select id="scenario-select" class="field-control"></select>
+
+<label class="field-label" for="scenario-name">Naam</label>
+<input id="scenario-name" class="field-control" maxlength="80" autocomplete="off">
+
+<div class="button-grid button-grid-3">
+<button id="new-scenario-button" class="button button-secondary" type="button">Nieuw</button>
+<button id="duplicate-scenario-button" class="button button-secondary" type="button">Kopie</button>
+<button id="delete-scenario-button" class="button button-danger-subtle" type="button">Verwijder</button>
+</div>
+</section>
+
+<section class="panel-section">
+<p class="eyebrow">PDOK Location API</p>
+<h2>Zoek locatie</h2>
+<div class="search-box">
+<label class="sr-only" for="location-search">Adres, plaats of perceel</label>
+<input id="location-search" class="field-control" placeholder="Bijv. Stationsplein 1 Utrecht" autocomplete="off">
+<button id="clear-search-button" class="search-clear hidden" type="button" aria-label="Wis zoekopdracht">x</button>
+<div id="search-results" class="search-results hidden" role="listbox"></div>
+</div>
+<p class="help-text">Zoek op adres, woonplaats of kadastrale aanduiding.</p>
+</section>
+
+<section class="panel-section">
+<div class="section-heading compact">
+<div>
+<p class="eyebrow">BRK Kadastrale Kaart</p>
+<h2>Selecteer kavels</h2>
+</div>
+<span id="selected-parcel-count" class="badge">0</span>
+</div>
+<div class="button-grid button-grid-2">
+<button id="load-parcels-button" class="button button-primary" type="button">Laad kavels</button>
+<button id="clear-parcels-button" class="button button-secondary" type="button">Wis selectie</button>
+</div>
+<div id="parcel-status" class="inline-status" aria-live="polite">Zoom in tot straatniveau en laad kavels.</div>
+<p class="help-text warning-text">Kadastrale grenzen zijn indicatief en niet geschikt voor landmeetkundige vaststelling.</p>
+</section>
+
+<section class="panel-section">
+<p class="eyebrow">Tekenlaag</p>
+<h2>Ruimtelijke invulling</h2>
+<div class="draw-grid">
+<button class="draw-button" data-draw-type="building" type="button">
+<span class="swatch swatch-building"></span>Bebouwing
+</button>
+<button class="draw-button" data-draw-type="green" type="button">
+<span class="swatch swatch-green"></span>Groen
+</button>
+<button class="draw-button" data-draw-type="parking" type="button">
+<span class="swatch swatch-parking"></span>Parkeren
+</button>
+<button class="draw-button" data-draw-type="public" type="button">
+<span class="swatch swatch-public"></span>Openbare ruimte
+</button>
+</div>
+<div class="button-grid button-grid-2 tool-row">
+<button id="edit-mode-button" class="button button-secondary" type="button">Bewerken</button>
+<button id="remove-mode-button" class="button button-secondary" type="button">Verwijderen</button>
+</div>
+<button id="stop-tool-button" class="button button-quiet full-width hidden" type="button">Stop actief gereedschap</button>
+<p class="help-text">Klik punten rondom een vlak; dubbelklik om af te ronden.</p>
+</section>
+
+<section class="panel-section panel-section-muted">
+<p class="eyebrow">Weergave</p>
+<h2>Kaartlagen</h2>
+<label class="check-row">
+<input id="toggle-loaded-parcels" type="checkbox" checked>
+<span>Beschikbare PDOK-kavels</span>
+</label>
+<label class="check-row">
+<input id="toggle-selected-parcels" type="checkbox" checked>
+<span>Geselecteerde kavels</span>
+</label>
+<label class="check-row">
+<input id="toggle-scenario-objects" type="checkbox" checked>
+<span>Scenario-objecten</span>
+</label>
+</section>
+
+<section class="panel-section panel-section-actions">
+<button id="demo-button" class="button button-secondary full-width" type="button">Voeg demonstratiescenario toe</button>
+<button id="reset-button" class="button button-quiet full-width" type="button">Herstel alle lokale gegevens</button>
+</section>
+</aside>
+
+<section class="map-column" aria-label="Interactieve kaart">
+<div id="map" tabindex="0" aria-label="Kaart van Nederland"></div>
+<div id="map-progress" class="map-progress hidden" role="status">
+<span class="spinner" aria-hidden="true"></span>
+<span id="map-progress-text">Gegevens laden...</span>
+</div>
+<div class="map-tip" id="map-tip">Zoek een locatie of zoom in en kies 'Laad kavels'.</div>
+<div class="map-legend" aria-label="Legenda">
+<button id="legend-toggle" class="legend-title" type="button" aria-expanded="true">Legenda</button>
+<div id="legend-content" class="legend-content">
+<span><i class="legend-line legend-parcel"></i>PDOK-kavel</span>
+<span><i class="legend-box legend-selected"></i>Geselecteerd</span>
+<span><i class="legend-box swatch-building"></i>Bebouwing</span>
+<span><i class="legend-box swatch-green"></i>Groen</span>
+<span><i class="legend-box swatch-parking"></i>Parkeren</span>
+<span><i class="legend-box swatch-public"></i>Openbare ruimte</span>
+</div>
+</div>
+</section>
+
+<aside class="panel panel-right" aria-label="Kengetallen en eigenschappen">
+<section class="panel-section kpi-section">
+<div class="section-heading">
+<div>
+<p class="eyebrow">Live berekend</p>
+<h2>Kengetallen</h2>
+</div>
+<span id="metric-warning" class="status-dot" title="Geen waarschuwingen"></span>
+</div>
+
+<div class="kpi-grid">
+<article class="kpi-card kpi-card-wide">
+<span>Plangebied</span>
+<strong id="metric-site-area">0 m2</strong>
+</article>
+<article class="kpi-card">
+<span>BVO</span>
+<strong id="metric-bvo">0 m2</strong>
+</article>
+<article class="kpi-card">
+<span>Bebouwd</span>
+<strong id="metric-footprint">0 m2</strong>
+</article>
+<article class="kpi-card">
+<span>FSI</span>
+<strong id="metric-fsi">0,00</strong>
+</article>
+<article class="kpi-card">
+<span>GSI</span>
+<strong id="metric-gsi">0%</strong>
+</article>
+<article class="kpi-card">
+<span>Groen</span>
+<strong id="metric-green">0%</strong>
+</article>
+<article class="kpi-card">
+<span>Woningen</span>
+<strong id="metric-dwellings">0</strong>
+</article>
+<article class="kpi-card">
+<span>Parkeerbalans</span>
+<strong id="metric-parking-balance">0</strong>
+</article>
+<article class="kpi-card">
+<span>Onverdeeld</span>
+<strong id="metric-unallocated">0 m2</strong>
+</article>
+</div>
+<div id="metrics-note" class="inline-status">Selecteer minimaal een kavel voor verhoudingsgetallen.</div>
+</section>
+
+<section class="panel-section">
+<p class="eyebrow">Scenario-aannames</p>
+<h2>Rekenregels</h2>
+<div class="form-grid form-grid-2">
+<label>
+<span>Netto/bruto wonen</span>
+<div class="input-suffix">
+<input id="assumption-net-gross" type="number" min="1" max="100" step="1">
+<em>%</em>
+</div>
+</label>
+<label>
+<span>Gem. woning</span>
+<div class="input-suffix">
+<input id="assumption-dwelling-area" type="number" min="20" max="300" step="1">
+<em>m2</em>
+</div>
+</label>
+<label>
+<span>Parkeernorm</span>
+<div class="input-suffix">
+<input id="assumption-parking-norm" type="number" min="0" max="5" step="0.1">
+<em>pp/w</em>
+</div>
+</label>
+<label>
+<span>Ruimte per plek</span>
+<div class="input-suffix">
+<input id="assumption-parking-area" type="number" min="10" max="60" step="1">
+<em>m2</em>
+</div>
+</label>
+</div>
+</section>
+
+<section id="object-editor-section" class="panel-section hidden">
+<div class="section-heading compact">
+<div>
+<p class="eyebrow">Kaartobject</p>
+<h2>Eigenschappen</h2>
+</div>
+<button id="close-object-editor" class="icon-button" type="button" aria-label="Sluit eigenschappen">x</button>
+</div>
+
+<label class="field-label" for="object-type">Type</label>
+<select id="object-type" class="field-control">
+<option value="building">Bebouwing</option>
+<option value="green">Groen</option>
+<option value="parking">Parkeren</option>
+<option value="public">Openbare ruimte</option>
+</select>
+
+<label class="field-label" for="object-name">Naam</label>
+<input id="object-name" class="field-control" maxlength="80">
+
+<div id="building-fields">
+<div class="form-grid form-grid-2">
+<label>
+<span>Bouwlagen</span>
+<input id="object-floors" type="number" min="1" max="80" step="1">
+</label>
+<label>
+<span>Functie</span>
+<select id="object-function">
+<option value="wonen">Wonen</option>
+<option value="gemengd">Gemengd</option>
+<option value="werken">Werken</option>
+<option value="voorzieningen">Voorzieningen</option>
+</select>
+</label>
+</div>
+<label class="field-label" for="object-residential-share">Aandeel wonen</label>
+<div class="range-row">
+<input id="object-residential-share" type="range" min="0" max="100" step="5">
+<output id="object-residential-output">100%</output>
+</div>
+</div>
+
+<label class="field-label" for="object-notes">Notitie</label>
+<textarea id="object-notes" class="field-control" rows="3" maxlength="500"></textarea>
+
+<dl class="object-summary">
+<div><dt>Oppervlakte</dt><dd id="object-area">0 m2</dd></div>
+<div><dt>BVO object</dt><dd id="object-bvo">0 m2</dd></div>
+</dl>
+<button id="delete-object-button" class="button button-danger-subtle full-width" type="button">Verwijder object</button>
+</section>
+
+<section id="empty-editor-section" class="panel-section empty-state">
+<strong>Selecteer een getekend vlak</strong>
+<p>Klik op een scenario-object om naam, type, bouwlagen en programma aan te passen.</p>
+</section>
+
+<section class="panel-section panel-section-muted source-note">
+<strong>Databronnen</strong>
+<p>PDOK BRT-Achtergrondkaart, PDOK Location API en BRK Kadastrale Kaart OGC API. Berekeningen zijn indicatief.</p>
+</section>
+</aside>
+</main>
+</div>
+
+<dialog id="compare-dialog" class="modal">
+<form method="dialog" class="modal-card modal-card-wide">
+<div class="modal-header">
+<div>
+<p class="eyebrow">Variantvergelijking</p>
+<h2>Vergelijk scenario's</h2>
+</div>
+<button class="icon-button" value="cancel" aria-label="Sluit vergelijking">x</button>
+</div>
+<div class="compare-selectors">
+<label>Scenario A<select id="compare-a"></select></label>
+<span>versus</span>
+<label>Scenario B<select id="compare-b"></select></label>
+</div>
+<div class="table-wrap">
+<table class="compare-table">
+<thead><tr><th>Kengetal</th><th id="compare-a-heading">A</th><th id="compare-b-heading">B</th><th>Verschil B - A</th></tr></thead>
+<tbody id="compare-table-body"></tbody>
+</table>
+</div>
+<div class="modal-actions"><button class="button button-primary" value="cancel">Sluiten</button></div>
+</form>
+</dialog>
+
+<dialog id="help-dialog" class="modal">
+<form method="dialog" class="modal-card">
+<div class="modal-header">
+<div>
+<p class="eyebrow">Aan de slag</p>
+<h2>Werkwijze</h2>
+</div>
+<button class="icon-button" value="cancel" aria-label="Sluit uitleg">x</button>
+</div>
+<ol class="steps-list">
+<li><strong>Zoek een locatie.</strong><span>Gebruik een adres, plaats of kadastrale aanduiding.</span></li>
+<li><strong>Laad en selecteer kavels.</strong><span>Zoom in, laad de BRK-kavels en klik op een of meer vlakken.</span></li>
+<li><strong>Teken het scenario.</strong><span>Voeg bebouwing, groen, parkeren en openbare ruimte toe.</span></li>
+<li><strong>Pas de aannames aan.</strong><span>Stel woninggrootte, netto/bruto en parkeernorm in.</span></li>
+<li><strong>Maak varianten.</strong><span>Dupliceer een scenario en vergelijk de kengetallen.</span></li>
+<li><strong>Exporteer.</strong><span>JSON behoudt alle instellingen; GeoJSON is geschikt voor GIS.</span></li>
+</ol>
+<div class="callout">
+<strong>Belangrijk</strong>
+<p>De tool is bedoeld voor vroege planvorming. Kadastrale grenzen, programma en kengetallen zijn niet juridisch, financieel of landmeetkundig gevalideerd.</p>
+</div>
+<div class="modal-actions"><button class="button button-primary" value="cancel">Begrepen</button></div>
+</form>
+</dialog>
+
+<div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+<script
+src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+crossorigin=""
+></script>
+<script src="https://cdn.jsdelivr.net/npm/@geoman-io/leaflet-geoman-free@2.20.0/dist/leaflet-geoman.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.3.5/turf.min.js"></script>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>
